@@ -2,23 +2,25 @@
 // REPLACE WITH YOUR TOKEN
 mapboxgl.accessToken = 'pk.eyJ1IjoianVsaW92aWVqbyIsImEiOiJja2Y3NHBtM2gwd3M2MnNydmIxYjYxa2lvIn0.puI9pJXRVKcgpBONE8cYXA';
 
-
 const categoryColors = {
-    'Radioactive': '#FF3333',       // Bright Red
-    'Dioxins & Furans': '#D000D0',  // Neon Purple
-    'Explosives': '#FF9900',        // Bright Orange
-    'PCBs': '#FF5500',              // Red-Orange
-    'Pesticides': '#00FF00',        // Lime Green
-    'Metals': '#00CCFF',            // Cyan
-    'VOCs': '#3366FF',              // Royal Blue
-    'SVOCs': '#6633FF',             // Blue-Purple
-    'Asbestos': '#FFFFFF',          // White
-    'Cyanides': '#00FFFF',          // Aqua
-    'Other': '#FFFF00',             // Yellow
-    'Unknown': '#444444'            // Dark Grey
+    'Radioactive': '#FF3333',
+    'Dioxins & Furans': '#D000D0',
+    'Explosives': '#FF9900',
+    'PCBs': '#FF5500',
+    'Pesticides': '#00FF00',
+    'Metals': '#00CCFF',
+    'VOCs': '#3366FF',
+    'SVOCs': '#6633FF',
+    'Asbestos': '#FFFFFF',
+    'Cyanides': '#00FFFF',
+    'Other': '#FFFF00',
+    'Unknown': '#444444'
 };
 
+// --- STATE MANAGEMENT ---
 let bookmarks = JSON.parse(localStorage.getItem('superfundBookmarks')) || [];
+let siteData = null;       // Will hold the full GeoJSON
+let currentSearchIDs = null; // Null means "no search active"
 
 const map = new mapboxgl.Map({
     container: 'map',
@@ -31,10 +33,7 @@ const map = new mapboxgl.Map({
 // --- LOAD EVENTS ---
 
 map.on('style.load', () => {
-    // 1. Make Map Transparent (for Starfield Background)
     map.setBackgroundColor('rgba(0,0,0,0)');
-    
-    // 2. Remove Atmosphere/Fog (Transparency Fix)
     map.setFog({
         'color': 'rgba(0,0,0,0)',
         'high-color': 'rgba(0,0,0,0)',
@@ -45,13 +44,31 @@ map.on('style.load', () => {
 });
 
 map.on('load', () => {
-    // 3. Add Data Source
-    map.addSource('superfund-sites', {
-        type: 'geojson',
-        data: 'data/superfund_sites.json'
-    });
+    // 1. Fetch Data Manually so we can search it
+    fetch('data/superfund_sites.json')
+        .then(response => response.json())
+        .then(data => {
+            siteData = data; // Save to global variable for search
 
-    // 4. LAYER: Glow (Background)
+            // 2. Add Source
+            map.addSource('superfund-sites', {
+                type: 'geojson',
+                data: siteData
+            });
+
+            // 3. Add Layers
+            addLayers();
+
+            // 4. Init UI
+            createFilterUI();
+            initSearch();
+            setupInteractions();
+        })
+        .catch(error => console.error("Error loading JSON:", error));
+});
+
+function addLayers() {
+    // LAYER: Glow
     map.addLayer({
         id: 'sites-glow',
         type: 'circle',
@@ -69,14 +86,14 @@ map.on('load', () => {
         }
     });
 
-    // 5. LAYER: Core (Foreground Dot)
+    // LAYER: Core
     map.addLayer({
         id: 'sites-core',
         type: 'circle',
         source: 'superfund-sites',
         paint: {
             'circle-radius': 3.5,
-            'circle-stroke-width': 0, // No Outline
+            'circle-stroke-width': 0,
             'circle-color': [
                 'match',
                 ['get', 'Primary_Contaminant_Category'],
@@ -85,43 +102,59 @@ map.on('load', () => {
             ]
         }
     });
+}
 
-    // 6. Init UI
-    createFilterUI();
-    setupInteractions();
-});
+// --- SEARCH LOGIC ---
 
-// --- UI GENERATION ---
+function initSearch() {
+    const searchInput = document.getElementById('site-search');
+    if(!searchInput) return;
+
+    searchInput.addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+
+        if (term === '') {
+            currentSearchIDs = null; // Clear search filter
+        } else {
+            // Filter the actual data in memory
+            const matches = siteData.features.filter(feature => {
+                const props = feature.properties;
+                // Check Name, City, and State
+                return (props.Site_Name && props.Site_Name.toLowerCase().includes(term)) ||
+                       (props.City && props.City.toLowerCase().includes(term)) ||
+                       (props.State && props.State.toLowerCase().includes(term));
+            });
+
+            // Extract just the IDs
+            currentSearchIDs = matches.map(f => f.properties.Site_EPA_ID);
+        }
+
+        updateFilters();
+    });
+}
+
+// --- FILTER UI ---
 
 function createFilterUI() {
     const container = document.getElementById('category-filters');
-    
-    if (!container) {
-        console.error("Legend container 'category-filters' not found in HTML!");
-        return;
-    }
-
-    // Clear existing (just in case)
+    if (!container) return;
     container.innerHTML = '';
 
     Object.keys(categoryColors).forEach(cat => {
         const row = document.createElement('div');
         row.className = 'filter-row';
         
-        // 1. Checkbox
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.checked = true;
         input.id = `filter-${cat}`;
         input.addEventListener('change', updateFilters);
         
-        // 2. Color Dot
         const dot = document.createElement('span');
         dot.className = 'color-dot';
         dot.style.backgroundColor = categoryColors[cat];
         dot.style.boxShadow = `0 0 5px ${categoryColors[cat]}`;
         
-        // 3. Label
         const label = document.createElement('label');
         label.htmlFor = `filter-${cat}`;
         label.innerText = cat;
@@ -132,38 +165,43 @@ function createFilterUI() {
         container.appendChild(row);
     });
     
-    // Bookmark Listener
     const bookmarkToggle = document.getElementById('show-bookmarks');
-    if(bookmarkToggle) {
-        bookmarkToggle.addEventListener('change', updateFilters);
-    }
+    if(bookmarkToggle) bookmarkToggle.addEventListener('change', updateFilters);
 }
 
-// --- FILTER LOGIC ---
+// --- APPLY FILTERS ---
 
 function updateFilters() {
-    // Get all checked categories
+    // 1. Get Checked Categories
     const checkedCategories = Object.keys(categoryColors).filter(cat => {
         const el = document.getElementById(`filter-${cat}`);
         return el && el.checked;
     });
 
-    // Base Filter
-    let filter = ['in', ['get', 'Primary_Contaminant_Category'], ['literal', checkedCategories]];
+    // Start with Category Filter
+    let conditions = [];
+    conditions.push(['in', ['get', 'Primary_Contaminant_Category'], ['literal', checkedCategories]]);
 
-    // Bookmark Filter
+    // 2. Add Bookmark Filter (if active)
     const bookmarkToggle = document.getElementById('show-bookmarks');
     if (bookmarkToggle && bookmarkToggle.checked) {
-        const bookmarkFilter = ['in', ['get', 'Site_EPA_ID'], ['literal', bookmarks]];
-        filter = ['all', filter, bookmarkFilter];
+        conditions.push(['in', ['get', 'Site_EPA_ID'], ['literal', bookmarks]]);
     }
 
-    // Apply to layers
-    if (map.getLayer('sites-core')) map.setFilter('sites-core', filter);
-    if (map.getLayer('sites-glow')) map.setFilter('sites-glow', filter);
+    // 3. Add Search Filter (if active)
+    if (currentSearchIDs !== null) {
+        conditions.push(['in', ['get', 'Site_EPA_ID'], ['literal', currentSearchIDs]]);
+    }
+
+    // Combine all filters with "all" (AND logic)
+    const finalFilter = ['all', ...conditions];
+
+    // Apply to map layers
+    if (map.getLayer('sites-core')) map.setFilter('sites-core', finalFilter);
+    if (map.getLayer('sites-glow')) map.setFilter('sites-glow', finalFilter);
 }
 
-// --- INTERACTION LOGIC ---
+// --- INTERACTIONS ---
 
 function setupInteractions() {
     map.on('click', 'sites-core', (e) => {
@@ -195,12 +233,9 @@ function setupInteractions() {
             .addTo(map);
     });
 
-    // Cursor Pointers
     map.on('mouseenter', 'sites-core', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'sites-core', () => map.getCanvas().style.cursor = '');
 }
-
-// --- GLOBAL HELPERS ---
 
 window.toggleBookmark = function(siteId) {
     const index = bookmarks.indexOf(siteId);
@@ -208,23 +243,14 @@ window.toggleBookmark = function(siteId) {
     
     if (index === -1) {
         bookmarks.push(siteId);
-        if(btn) {
-            btn.innerText = '★ TRACKED';
-            btn.classList.add('active');
-        }
+        if(btn) { btn.innerText = '★ TRACKED'; btn.classList.add('active'); }
     } else {
         bookmarks.splice(index, 1);
-        if(btn) {
-            btn.innerText = '☆ TRACK SITE';
-            btn.classList.remove('active');
-        }
+        if(btn) { btn.innerText = '☆ TRACK SITE'; btn.classList.remove('active'); }
     }
     
     localStorage.setItem('superfundBookmarks', JSON.stringify(bookmarks));
     
-    // Refresh filters if showing bookmarks
     const bookmarkToggle = document.getElementById('show-bookmarks');
-    if (bookmarkToggle && bookmarkToggle.checked) {
-        updateFilters();
-    }
+    if (bookmarkToggle && bookmarkToggle.checked) updateFilters();
 };
