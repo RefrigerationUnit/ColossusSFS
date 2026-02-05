@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COLOSSUS | Superfund Map</title>
+    
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css' rel='stylesheet' />
+    
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="header">
+            <h1>COLOSSUS</h1>
+            <div class="subtitle">SUPERFUND SITE TRACKER</div>
+        </div>
+        <div class="stats-panel">
+            <div class="stat-item">
+                <span class="label">ACTIVE SITES</span>
+                <span class="value">1,589</span>
+            </div>
+            <div class="stat-item">
+                <span class="label">SYSTEM STATUS</span>
+                <span class="value blink">ONLINE</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="sidebar">
+        <h3>CONTAMINANT FILTERS</h3>
+        <div id="category-filters"></div>
+        <div class="filter-footer">
+            <label class="toggle-switch">
+                <input type="checkbox" id="show-bookmarks">
+                <span class="toggle-label">★ SHOW BOOKMARKS ONLY</span>
+            </label>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="js/network.js"></script> 
+    <script src="js/map.js"></script>
+
+</body>
+</html>
