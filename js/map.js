@@ -2,6 +2,7 @@
 // REPLACE WITH YOUR TOKEN
 mapboxgl.accessToken = 'pk.eyJ1IjoianVsaW92aWVqbyIsImEiOiJja2Y3NHBtM2gwd3M2MnNydmIxYjYxa2lvIn0.puI9pJXRVKcgpBONE8cYXA';
 
+
 const categoryColors = {
     'Radioactive': '#FF3333',
     'Dioxins & Furans': '#D000D0',
@@ -19,8 +20,8 @@ const categoryColors = {
 
 // --- STATE MANAGEMENT ---
 let bookmarks = JSON.parse(localStorage.getItem('superfundBookmarks')) || [];
-let siteData = null;       // Will hold the full GeoJSON
-let currentSearchIDs = null; // Null means "no search active"
+let siteData = null;       
+let currentSearchIDs = null; 
 
 const map = new mapboxgl.Map({
     container: 'map',
@@ -33,27 +34,28 @@ const map = new mapboxgl.Map({
 // --- LOAD EVENTS ---
 
 map.on('style.load', () => {
-    map.setBackgroundColor('rgba(0,0,0,0)');
+    // Configure the 3D Atmosphere (Stars)
     map.setFog({
-        'color': 'rgba(0,0,0,0)',
-        'high-color': 'rgba(0,0,0,0)',
-        'horizon-blend': 0,
-        'space-color': 'rgba(0,0,0,0)',
-        'star-intensity': 0
+        'range': [0.5, 10],
+        'color': 'rgba(0, 0, 0, 0)',      // Transparent atmosphere
+        'high-color': 'rgba(0, 0, 0, 0)', // Transparent upper atmosphere
+        'horizon-blend': 0.1,             // Soft horizon
+        'space-color': '#050505',         // Deep black space
+        'star-intensity': 1.0             // Bright stars
     });
 });
 
 map.on('load', () => {
-    // 1. Fetch Data Manually so we can search it
+    // 1. Fetch Data
     fetch('data/superfund_sites.json')
         .then(response => response.json())
         .then(data => {
-            siteData = data; // Save to global variable for search
-
+            siteData = data; 
+            
             // 2. Add Source
-            map.addSource('superfund-sites', {
-                type: 'geojson',
-                data: siteData
+            map.addSource('superfund-sites', { 
+                type: 'geojson', 
+                data: siteData 
             });
 
             // 3. Add Layers
@@ -68,7 +70,7 @@ map.on('load', () => {
 });
 
 function addLayers() {
-    // LAYER: Glow
+    // LAYER: Glow (Behind dots)
     map.addLayer({
         id: 'sites-glow',
         type: 'circle',
@@ -86,7 +88,7 @@ function addLayers() {
         }
     });
 
-    // LAYER: Core
+    // LAYER: Core (The dots)
     map.addLayer({
         id: 'sites-core',
         type: 'circle',
@@ -114,21 +116,16 @@ function initSearch() {
         const term = e.target.value.toLowerCase().trim();
 
         if (term === '') {
-            currentSearchIDs = null; // Clear search filter
+            currentSearchIDs = null; 
         } else {
-            // Filter the actual data in memory
             const matches = siteData.features.filter(feature => {
                 const props = feature.properties;
-                // Check Name, City, and State
                 return (props.Site_Name && props.Site_Name.toLowerCase().includes(term)) ||
                        (props.City && props.City.toLowerCase().includes(term)) ||
                        (props.State && props.State.toLowerCase().includes(term));
             });
-
-            // Extract just the IDs
             currentSearchIDs = matches.map(f => f.properties.Site_EPA_ID);
         }
-
         updateFilters();
     });
 }
@@ -172,31 +169,25 @@ function createFilterUI() {
 // --- APPLY FILTERS ---
 
 function updateFilters() {
-    // 1. Get Checked Categories
     const checkedCategories = Object.keys(categoryColors).filter(cat => {
         const el = document.getElementById(`filter-${cat}`);
         return el && el.checked;
     });
 
-    // Start with Category Filter
     let conditions = [];
     conditions.push(['in', ['get', 'Primary_Contaminant_Category'], ['literal', checkedCategories]]);
 
-    // 2. Add Bookmark Filter (if active)
     const bookmarkToggle = document.getElementById('show-bookmarks');
     if (bookmarkToggle && bookmarkToggle.checked) {
         conditions.push(['in', ['get', 'Site_EPA_ID'], ['literal', bookmarks]]);
     }
 
-    // 3. Add Search Filter (if active)
     if (currentSearchIDs !== null) {
         conditions.push(['in', ['get', 'Site_EPA_ID'], ['literal', currentSearchIDs]]);
     }
 
-    // Combine all filters with "all" (AND logic)
     const finalFilter = ['all', ...conditions];
 
-    // Apply to map layers
     if (map.getLayer('sites-core')) map.setFilter('sites-core', finalFilter);
     if (map.getLayer('sites-glow')) map.setFilter('sites-glow', finalFilter);
 }
@@ -212,7 +203,6 @@ function setupInteractions() {
         const isBookmarked = bookmarks.includes(siteId);
         const btnText = isBookmarked ? '★ TRACKED' : '☆ TRACK SITE';
         const btnClass = isBookmarked ? 'active' : '';
-
         const contaminationText = props.Contaminants_List || props.Primary_Contaminant_Category;
 
         const html = `
