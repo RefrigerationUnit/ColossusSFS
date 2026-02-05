@@ -2,7 +2,7 @@
 // REPLACE WITH YOUR TOKEN
 mapboxgl.accessToken = 'pk.eyJ1IjoianVsaW92aWVqbyIsImEiOiJja2Y3NHBtM2gwd3M2MnNydmIxYjYxa2lvIn0.puI9pJXRVKcgpBONE8cYXA';
 
-// Neon / High Contrast Colors for Dark Mode
+
 const categoryColors = {
     'Radioactive': '#FF3333',       // Bright Red
     'Dioxins & Furans': '#D000D0',  // Neon Purple
@@ -18,24 +18,23 @@ const categoryColors = {
     'Unknown': '#444444'            // Dark Grey
 };
 
-// --- STATE MANAGEMENT ---
 let bookmarks = JSON.parse(localStorage.getItem('superfundBookmarks')) || [];
 
-// --- MAP INITIALIZATION ---
 const map = new mapboxgl.Map({
     container: 'map',
-    style: 'mapbox://styles/mapbox/dark-v11', // Dark base style
-    center: [-98.5795, 39.8283], // Center of US
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [-98.5795, 39.8283],
     zoom: 3.5,
-    projection: 'globe' // 3D Globe view
+    projection: 'globe' 
 });
 
-// --- STYLE & LAYERS ---
+// --- LOAD EVENTS ---
+
 map.on('style.load', () => {
-    // 1. CRITICAL: Make map background transparent so the network canvas shows through
+    // 1. Make Map Transparent (for Starfield Background)
     map.setBackgroundColor('rgba(0,0,0,0)');
     
-    // 2. Disable atmosphere/star fog to remove the "weird blue hue"
+    // 2. Remove Atmosphere/Fog (Transparency Fix)
     map.setFog({
         'color': 'rgba(0,0,0,0)',
         'high-color': 'rgba(0,0,0,0)',
@@ -46,40 +45,38 @@ map.on('style.load', () => {
 });
 
 map.on('load', () => {
-    // Add Source
+    // 3. Add Data Source
     map.addSource('superfund-sites', {
         type: 'geojson',
         data: 'data/superfund_sites.json'
     });
 
-    // LAYER 1: The Glow (Behind the dots)
-    // Larger radius, high blur, lower opacity
+    // 4. LAYER: Glow (Background)
     map.addLayer({
         id: 'sites-glow',
         type: 'circle',
         source: 'superfund-sites',
         paint: {
-            'circle-radius': 12, // Large glow radius
-            'circle-blur': 1,    // Maximum blur for soft effect
-            'circle-opacity': 0.4,
+            'circle-radius': 10,
+            'circle-blur': 1,
+            'circle-opacity': 0.5,
             'circle-color': [
                 'match',
                 ['get', 'Primary_Contaminant_Category'],
                 ...Object.entries(categoryColors).flat(),
-                '#444' // Fallback
+                '#444'
             ]
         }
     });
 
-    // LAYER 2: The Core (The actual dots)
-    // Smaller radius, solid color, NO OUTLINE (stroke-width: 0)
+    // 5. LAYER: Core (Foreground Dot)
     map.addLayer({
         id: 'sites-core',
         type: 'circle',
         source: 'superfund-sites',
         paint: {
-            'circle-radius': 4,
-            'circle-stroke-width': 0, // Removed black outline
+            'circle-radius': 3.5,
+            'circle-stroke-width': 0, // No Outline
             'circle-color': [
                 'match',
                 ['get', 'Primary_Contaminant_Category'],
@@ -89,34 +86,42 @@ map.on('load', () => {
         }
     });
 
-    // Initialize UI and Interactions
+    // 6. Init UI
     createFilterUI();
     setupInteractions();
 });
 
-// --- UI FUNCTIONS ---
+// --- UI GENERATION ---
 
 function createFilterUI() {
     const container = document.getElementById('category-filters');
     
+    if (!container) {
+        console.error("Legend container 'category-filters' not found in HTML!");
+        return;
+    }
+
+    // Clear existing (just in case)
+    container.innerHTML = '';
+
     Object.keys(categoryColors).forEach(cat => {
         const row = document.createElement('div');
         row.className = 'filter-row';
         
-        // Colored indicator
-        const dot = document.createElement('span');
-        dot.className = 'color-dot';
-        dot.style.backgroundColor = categoryColors[cat];
-        dot.style.boxShadow = `0 0 6px ${categoryColors[cat]}`; // Glow in sidebar too
-        
-        // Checkbox
+        // 1. Checkbox
         const input = document.createElement('input');
         input.type = 'checkbox';
         input.checked = true;
         input.id = `filter-${cat}`;
         input.addEventListener('change', updateFilters);
         
-        // Label
+        // 2. Color Dot
+        const dot = document.createElement('span');
+        dot.className = 'color-dot';
+        dot.style.backgroundColor = categoryColors[cat];
+        dot.style.boxShadow = `0 0 5px ${categoryColors[cat]}`;
+        
+        // 3. Label
         const label = document.createElement('label');
         label.htmlFor = `filter-${cat}`;
         label.innerText = cat;
@@ -127,51 +132,51 @@ function createFilterUI() {
         container.appendChild(row);
     });
     
-    // Bookmark toggle listener
+    // Bookmark Listener
     const bookmarkToggle = document.getElementById('show-bookmarks');
-    if (bookmarkToggle) {
+    if(bookmarkToggle) {
         bookmarkToggle.addEventListener('change', updateFilters);
     }
 }
 
+// --- FILTER LOGIC ---
+
 function updateFilters() {
-    // 1. Get enabled categories
+    // Get all checked categories
     const checkedCategories = Object.keys(categoryColors).filter(cat => {
-        return document.getElementById(`filter-${cat}`).checked;
+        const el = document.getElementById(`filter-${cat}`);
+        return el && el.checked;
     });
 
-    // 2. Base Filter: Category must be in checked list
+    // Base Filter
     let filter = ['in', ['get', 'Primary_Contaminant_Category'], ['literal', checkedCategories]];
 
-    // 3. Bookmark Filter: If toggle is on, ID must also be in bookmarks
-    if (document.getElementById('show-bookmarks').checked) {
+    // Bookmark Filter
+    const bookmarkToggle = document.getElementById('show-bookmarks');
+    if (bookmarkToggle && bookmarkToggle.checked) {
         const bookmarkFilter = ['in', ['get', 'Site_EPA_ID'], ['literal', bookmarks]];
         filter = ['all', filter, bookmarkFilter];
     }
 
-    // 4. Apply to BOTH layers (Glow and Core)
+    // Apply to layers
     if (map.getLayer('sites-core')) map.setFilter('sites-core', filter);
     if (map.getLayer('sites-glow')) map.setFilter('sites-glow', filter);
 }
 
-// --- INTERACTION FUNCTIONS ---
+// --- INTERACTION LOGIC ---
 
 function setupInteractions() {
-    // Click event on the "core" layer
     map.on('click', 'sites-core', (e) => {
         const props = e.features[0].properties;
         const coordinates = e.features[0].geometry.coordinates.slice();
         const siteId = props.Site_EPA_ID;
         
-        // Determine Bookmark State
         const isBookmarked = bookmarks.includes(siteId);
         const btnText = isBookmarked ? '★ TRACKED' : '☆ TRACK SITE';
         const btnClass = isBookmarked ? 'active' : '';
 
-        // Contaminant list or fallback
         const contaminationText = props.Contaminants_List || props.Primary_Contaminant_Category;
 
-        // Popup HTML
         const html = `
             <div class="popup-title">${props.Site_Name}</div>
             <div class="popup-meta">${props.City}, ${props.State}</div>
@@ -184,45 +189,42 @@ function setupInteractions() {
             </button>
         `;
 
-        // Create Popup
         new mapboxgl.Popup({ className: 'dark-popup' })
             .setLngLat(coordinates)
             .setHTML(html)
             .addTo(map);
     });
 
-    // Hover cursors
+    // Cursor Pointers
     map.on('mouseenter', 'sites-core', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'sites-core', () => map.getCanvas().style.cursor = '');
 }
 
-// --- GLOBAL HELPERS (Accessible by HTML) ---
+// --- GLOBAL HELPERS ---
 
 window.toggleBookmark = function(siteId) {
     const index = bookmarks.indexOf(siteId);
     const btn = document.getElementById(`btn-${siteId}`);
     
     if (index === -1) {
-        // Add
         bookmarks.push(siteId);
-        if (btn) {
+        if(btn) {
             btn.innerText = '★ TRACKED';
             btn.classList.add('active');
         }
     } else {
-        // Remove
         bookmarks.splice(index, 1);
-        if (btn) {
+        if(btn) {
             btn.innerText = '☆ TRACK SITE';
             btn.classList.remove('active');
         }
     }
     
-    // Save to LocalStorage
     localStorage.setItem('superfundBookmarks', JSON.stringify(bookmarks));
     
-    // Refresh map if filter is active
-    if (document.getElementById('show-bookmarks').checked) {
+    // Refresh filters if showing bookmarks
+    const bookmarkToggle = document.getElementById('show-bookmarks');
+    if (bookmarkToggle && bookmarkToggle.checked) {
         updateFilters();
     }
 };
