@@ -2,7 +2,6 @@
 // REPLACE WITH YOUR TOKEN
 mapboxgl.accessToken = 'pk.eyJ1IjoianVsaW92aWVqbyIsImEiOiJja2Y3NHBtM2gwd3M2MnNydmIxYjYxa2lvIn0.puI9pJXRVKcgpBONE8cYXA';
 
-
 const categoryColors = {
     'Radioactive': '#FF3333',
     'Dioxins & Furans': '#D000D0',
@@ -203,15 +202,26 @@ function setupInteractions() {
         const isBookmarked = bookmarks.includes(siteId);
         const btnText = isBookmarked ? '★ TRACKED' : '☆ TRACK SITE';
         const btnClass = isBookmarked ? 'active' : '';
-        const contaminationText = props.Contaminants_List || props.Primary_Contaminant_Category;
+        
+        // Data Extraction
+        const mainCategory = props.Primary_Contaminant_Category || 'Unknown';
+        const fullList = props.Contaminants_List || 'No detailed data available';
 
         const html = `
             <div class="popup-title">${props.Site_Name}</div>
             <div class="popup-meta">${props.City}, ${props.State}</div>
+            
             <div class="popup-contaminants">
-                <strong>DETECTED:</strong><br>
-                ${contaminationText}
+                <strong style="color: ${categoryColors[mainCategory] || '#fff'}">
+                    PRIMARY PROBLEM: ${mainCategory.toUpperCase()}
+                </strong>
+                <br><br>
+                <span style="color: #aaa; font-size: 0.9em;">
+                    <strong>Other contaminants include:</strong><br>
+                    ${fullList}
+                </span>
             </div>
+
             <button class="bookmark-btn ${btnClass}" onclick="toggleBookmark('${siteId}')" id="btn-${siteId}">
                 ${btnText}
             </button>
